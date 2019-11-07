@@ -7,7 +7,7 @@ FOSC     = 8000000UL
 OBJ_DIR  = ./obj
 DIST_DIR = ./dist
 
-SRCS     = main.c loop.c clock.c
+SRCS     = main.c loop.c
 
 
 OBJS     = $(SRCS:.c=.p1)

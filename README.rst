@@ -7,6 +7,9 @@ Features
 - Running multiple tasks
 - Asynchronous sleep
 - Await task (or tasks) finnished
+- Synchronization primitives:
+
+  - Event
 
 ============
 Usage
@@ -101,4 +104,38 @@ Wait pin changed
 			loop_return();
 		}
 		...
+	}
+
+
+Synchronization by Event
+::
+	LOOP_EVENT  event;
+
+	voit task1()
+	{
+		loop_wait(&event);
+		loop_task_finish();
+	}
+
+	void task2()
+	{
+		loop_wait(&event);
+		loop_task_finish();
+	}
+
+	void task3()
+	{
+		// Clear event
+		event.flag = 0;
+		// Start tasks
+		loop_task_start(task1);
+		loop_task_start(task2);
+		// Small delay
+		loop_sleep(100);
+		// Raise event
+		event.flag = 1;
+		// Wait task finished
+		loop_await(task1);
+		loop_await(task2);
+		loop_task_finish();
 	}

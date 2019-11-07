@@ -2,13 +2,9 @@
 #include "main.h"
 #include "config.h"
 #include "loop.h"
-#include "clock.h"
 
 
-void __interrupt() isr()
-{
-	clock_isr();
-}
+static LOOP_EVENT  evt;
 
 
 inline void setup()
@@ -25,8 +21,6 @@ inline void setup()
 		OSCCON1 = 0x60;
 		OSCFRQ  = 0x04;
 	}
-	// Инициализация периферии
-	clock_init();
 	// Режим сна - IDLE
 	IDLEN  = 1;
 	// Разрешаем прерывания от периферии
@@ -76,6 +70,21 @@ void task4()
 }
 
 
+void task5()
+{
+	loop_sleep(500);
+	evt.flag = 1;
+	loop_sleep(500);
+	loop_task_finish();
+}
+
+void task6()
+{
+	loop_wait(&evt);
+	loop_task_finish();
+}
+
+
 void task2()
 {
 	for(;;){
@@ -92,6 +101,14 @@ void task2()
 		// Wait both tasks finished
 		loop_await(task3);
 		loop_await(task4);
+		// Clear event and start task5 that raise event, task6 wait event
+		evt.flag = 0;
+		loop_task_start(task5);
+		loop_task_start(task6);
+		// Wait event raised and task5 finished
+		loop_wait(&evt);
+		loop_await(task5);
+		loop_await(task6);
 	}
 }
 
@@ -102,18 +119,14 @@ void main()
 	setup();
 	ei();
 
-	// Инициализируем и добавляем задачи в очередь
+	// Initialize and add tasks to event loop
 	loop_init();
 	loop_task_start(task1);
 	loop_task_start(task2);
 
-	// Основной цикл
+	// Main loop
+	uint16_t  msec;
 	for(;;){
-		// Считываем системные часы
-		uint16_t msec = clock_msec();
-		// Обрабатываем очередь
-		loop_tick(msec);
-		// Спим до след. события
-		SLEEP();
+		loop_tick(msec++);
 	}
 }

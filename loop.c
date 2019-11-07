@@ -6,7 +6,10 @@ typedef struct {
 	LOOP_TASK         entry;       // Task entry point
 	LOOP_TASK         pc;          // Task resume address
 	LOOP_TASK_STATUS  status;      // Task status (running, finished, ...)
-	uint8_t           data[2];     // Task local data
+	union {
+		const uint8_t *ptr;        // Task local data
+		uint8_t       data[2];
+	};
 	uint8_t           context[8];  // MCU context (registers)
 } TASK;
 
@@ -22,13 +25,13 @@ typedef struct {
 
 
 typedef struct {
-	uint8_t  lock;
-} MUTEX;
+	LOOP_EVENT  *event;
+} EVENT;
 
 
 typedef struct {
-	uint8_t  set;
-} EVENT;
+	uint8_t  lock;
+} MUTEX;
 
 
 __persistent struct {
@@ -51,16 +54,16 @@ void loop_init()
 }
 
 
-void loop_task_start(const LOOP_TASK pc)
+void loop_task_start(const LOOP_TASK entry)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		// Task already started, return
-		if ((task->entry==pc)&&(task->status!=LOOP_TASK_STATUS_FINISHED)) break;
+		if ((task->entry==entry)&&(task->status!=LOOP_TASK_STATUS_FINISHED)) break;
 		// Find first empty slot and save task to it
 		if (task->status==LOOP_TASK_STATUS_FINISHED){
-			task->pc     = pc;
-			task->entry  = pc;
+			task->pc     = entry;
+			task->entry  = entry;
 			task->status = LOOP_TASK_STATUS_RUN;
 			break;
 		}
@@ -68,12 +71,12 @@ void loop_task_start(const LOOP_TASK pc)
 }
 
 
-void loop_task_cancel(const LOOP_TASK pc)
+void loop_task_cancel(const LOOP_TASK entry)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		// Find task by entry point and mark finished
-		if (task->entry==pc){
+		if (task->entry==entry){
 			task->status = LOOP_TASK_STATUS_FINISHED;
 			break;
 		}
@@ -183,12 +186,12 @@ void __loop_restore_sp()
 }
 
 
-LOOP_TASK_STATUS loop_task_status(const LOOP_TASK pc)
+LOOP_TASK_STATUS loop_task_status(const LOOP_TASK entry)
 {
 	TASK  *task = loop.tasks;
 	// Find task by entry point
 	for(uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
-		if (task->entry==pc) return task->status;
+		if (task->entry==entry) return task->status;
 	}
 	// Task not found, return as finished
 	return LOOP_TASK_STATUS_FINISHED;
@@ -241,10 +244,10 @@ void loop_sleep(uint16_t msec)
 }
 
 
-void loop_await(const LOOP_TASK pc)
+void loop_await(const LOOP_TASK entry)
 {
 	// Save awaiting task entry point
-	((AWAIT*)&loop.task->data)->entry = pc;
+	((AWAIT*)&loop.task->data)->entry = entry;
 	// Save context
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_save_context();
@@ -261,6 +264,31 @@ void loop_await(const LOOP_TASK pc)
 	__loop_restore_context();
 	// If awaiting task finished, resume task
 	if (loop_task_status(((AWAIT*)&loop.task->data)->entry)==LOOP_TASK_STATUS_FINISHED){
+		__loop_restore_sp();
+	}
+}
+
+
+void loop_wait(LOOP_EVENT *event)
+{
+	// Save event address
+	((EVENT*)&loop.task->data)->event = event;
+	// Save context
+	FSR0 = (uint16_t) &loop.task->context;
+	__loop_save_context();
+	// Patch stack
+	FSR0 = (uint16_t) &loop.task->pc;
+	asm("movlw     low(EVENT_RESUME)");
+	asm("movwi     0[FSR0]");
+	asm("movlw     high(EVENT_RESUME)");
+	asm("movwi     1[FSR0]");
+	asm("return");
+	// Restore context
+	asm("EVENT_RESUME:");
+	FSR0 = (uint16_t) &loop.task->context;
+	__loop_restore_context();
+	// If awaiting task finished, resume task
+	if (((EVENT*)&loop.task->data)->event->flag){
 		__loop_restore_sp();
 	}
 }
