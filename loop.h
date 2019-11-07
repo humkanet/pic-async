@@ -18,14 +18,19 @@ typedef enum {
 
 void  loop_init(void);
 void  loop_tick(uint16_t msec);
-void  loop_task_start(LOOP_TASK pc);
-void  loop_task_cancel(LOOP_TASK pc);
+void  loop_task_start(const LOOP_TASK pc);
+void  loop_task_cancel(const LOOP_TASK pc);
 void  loop_task_finish(void);
-LOOP_TASK_STATUS  loop_task_status(LOOP_TASK pc);
+LOOP_TASK_STATUS  loop_task_status(const LOOP_TASK pc);
 
+/* Sleep *msec* interval */
 void  loop_sleep(uint16_t msec);
-void  loop_await(LOOP_TASK pc);
-void  loop_continue(void);
+
+/* Await task with entry point *pc* finished */
+void  loop_await(const LOOP_TASK pc);
+
+/* Return contorl to event loop */
+void  loop_return(void);
 
 
 #endif

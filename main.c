@@ -53,19 +53,6 @@ void task1()
 }
 
 
-void task2()
-{
-	for(;;){
-		asm("nop");
-		loop_sleep(100);
-		asm("nop");
-		loop_sleep(200);
-		asm("nop");
-		loop_sleep(300);
-	}
-}
-
-
 void task3()
 {
 	// !!! All variables must be static !!!
@@ -73,10 +60,39 @@ void task3()
 	// Iterate 3 times
 	for(n=0; n<3; n++){
 		loop_sleep(250);
-		asm("nop");
 	}
 	// Mark task as finished
 	loop_task_finish();
+}
+
+
+void task4()
+{
+	static uint8_t n;
+	for(n=0; n<5; n++){
+		loop_sleep(250);
+	}
+	loop_task_finish();
+}
+
+
+void task2()
+{
+	for(;;){
+		loop_sleep(100);
+		loop_sleep(200);
+		loop_sleep(300);
+		// Start task3
+		loop_task_start(task3);
+		// Wait task finished
+		loop_await(task3);
+		// Start two tasks: task3 and task4
+		loop_task_start(task3);
+		loop_task_start(task4);
+		// Wait both tasks finished
+		loop_await(task3);
+		loop_await(task4);
+	}
 }
 
 
@@ -90,7 +106,6 @@ void main()
 	loop_init();
 	loop_task_start(task1);
 	loop_task_start(task2);
-	loop_task_start(task3);
 
 	// Основной цикл
 	for(;;){

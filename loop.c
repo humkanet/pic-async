@@ -3,6 +3,7 @@
 
 
 typedef struct {
+	LOOP_TASK         entry;
 	LOOP_TASK         pc;          // Адрес, с которого продолжить обработку
 	LOOP_TASK_STATUS  status;      // Состояние задачи
 	uint8_t           data[2];     // Локальные данные задачи
@@ -16,7 +17,7 @@ typedef struct {
 
 
 typedef struct {
-	volatile void  *pc;
+	LOOP_TASK  entry;
 } AWAIT;
 
 
@@ -30,14 +31,14 @@ typedef struct {
 } EVENT;
 
 
-struct {
+__persistent struct {
 	uint16_t  msec;
 	TASK      *task;
 	TASK      tasks[LOOP_MAX_TASKS];
 } loop;
 
 
-static uint8_t __loop_int_mask;
+__persistent static uint8_t __loop_int_mask;
 
 
 void loop_init()
@@ -50,15 +51,16 @@ void loop_init()
 }
 
 
-void loop_task_start(LOOP_TASK pc)
+void loop_task_start(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		// Проверяем, что задача не запущена
-		if ((task->pc==pc)&&(task->status!=LOOP_TASK_STATUS_FINISHED)) break;
+		if ((task->entry==pc)&&(task->status!=LOOP_TASK_STATUS_FINISHED)) break;
 		// Ищем первый свободный слот и сохраняем в него задачу
 		if (task->status==LOOP_TASK_STATUS_FINISHED){
 			task->pc     = pc;
+			task->entry  = pc;
 			task->status = LOOP_TASK_STATUS_RUN;
 			break;
 		}
@@ -66,12 +68,12 @@ void loop_task_start(LOOP_TASK pc)
 }
 
 
-void loop_task_cancel(LOOP_TASK pc)
+void loop_task_cancel(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		// Ищем и отменяем задачу
-		if (task->pc==pc){
+		if (task->entry==pc){
 			task->status = LOOP_TASK_STATUS_FINISHED;
 			break;
 		}
@@ -96,7 +98,7 @@ void loop_tick(uint16_t msec)
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, loop.task++){
 		switch (loop.task->status){
 			case LOOP_TASK_STATUS_RUN:
-				if (loop.task->pc) loop.task->pc();
+				loop.task->pc();
 				asm("LOOP_RESUME:");
 				break;
 			default:
@@ -182,19 +184,19 @@ void __loop_restore_sp()
 }
 
 
-LOOP_TASK_STATUS loop_task_status(LOOP_TASK pc)
+LOOP_TASK_STATUS loop_task_status(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
 	// Ищем задачу
 	for(uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
-		if (task->pc==pc) return task->status;
+		if (task->entry==pc) return task->status;
 	}
 	// Задача не найдена
 	return LOOP_TASK_STATUS_FINISHED;
 }
 
 
-void loop_continue()
+void loop_return()
 {
 	// Сохраняем контекст
 	FSR0 = (uint16_t) &loop.task->context;
@@ -240,10 +242,10 @@ void loop_sleep(uint16_t msec)
 }
 
 
-void loop_await(LOOP_TASK pc)
+void loop_await(const LOOP_TASK pc)
 {
 	// Запоминаем задачу
-	((AWAIT*)&loop.task->data)->pc = pc;
+	((AWAIT*)&loop.task->data)->entry = pc;
 	// Сохраняем контекст
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_save_context();
@@ -259,7 +261,7 @@ void loop_await(LOOP_TASK pc)
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_restore_context();
 	// Если задача завершена возвращаем управление
-	if (loop_task_status(((AWAIT*)&loop.task->data)->pc)==LOOP_TASK_STATUS_FINISHED){
+	if (loop_task_status(((AWAIT*)&loop.task->data)->entry)==LOOP_TASK_STATUS_FINISHED){
 		__loop_restore_sp();
 	}
 }
