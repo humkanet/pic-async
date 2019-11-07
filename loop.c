@@ -3,11 +3,11 @@
 
 
 typedef struct {
-	LOOP_TASK         entry;
-	LOOP_TASK         pc;          // Адрес, с которого продолжить обработку
-	LOOP_TASK_STATUS  status;      // Состояние задачи
-	uint8_t           data[2];     // Локальные данные задачи
-	uint8_t           context[8];  // Контекст для сохранения регистров
+	LOOP_TASK         entry;       // Task entry point
+	LOOP_TASK         pc;          // Task resume address
+	LOOP_TASK_STATUS  status;      // Task status (running, finished, ...)
+	uint8_t           data[2];     // Task local data
+	uint8_t           context[8];  // MCU context (registers)
 } TASK;
 
 
@@ -43,7 +43,7 @@ __persistent static uint8_t __loop_int_mask;
 
 void loop_init()
 {
-	// Помечаем все задачи как завершенные
+	// Mark all tasks as finished
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		task->status = LOOP_TASK_STATUS_FINISHED;
@@ -55,9 +55,9 @@ void loop_task_start(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
-		// Проверяем, что задача не запущена
+		// Task already started, return
 		if ((task->entry==pc)&&(task->status!=LOOP_TASK_STATUS_FINISHED)) break;
-		// Ищем первый свободный слот и сохраняем в него задачу
+		// Find first empty slot and save task to it
 		if (task->status==LOOP_TASK_STATUS_FINISHED){
 			task->pc     = pc;
 			task->entry  = pc;
@@ -72,7 +72,7 @@ void loop_task_cancel(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
-		// Ищем и отменяем задачу
+		// Find task by entry point and mark finished
 		if (task->entry==pc){
 			task->status = LOOP_TASK_STATUS_FINISHED;
 			break;
@@ -83,17 +83,16 @@ void loop_task_cancel(const LOOP_TASK pc)
 
 void loop_task_finish()
 {
-	// Помечаем задачу, как завершенную
+	// Mark task as finished
 	loop.task->status = LOOP_TASK_STATUS_FINISHED;
 }
 
 
 void loop_tick(uint16_t msec)
 {
-	// Проверяем время
-	if (msec==loop.msec) return;
+	// Save system clock
 	loop.msec = msec;
-	// Проходимся по всем задачам
+	// Loop over all tasks
 	loop.task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, loop.task++){
 		switch (loop.task->status){
@@ -110,8 +109,8 @@ void loop_tick(uint16_t msec)
 
 void __loop_save_context()
 {
-	/* !!! FSR0 должен указывать на на контекст !!! */
-	// Сохраняем регистры
+	/* !!! FSR0 must be point to task context !!! */
+	// Save registers
 	asm("movwi     0[FSR0]");
 	asm("movf      BSR, W");
 	asm("movwi     1[FSR0]");
@@ -123,25 +122,25 @@ void __loop_save_context()
 	asm("movwi     4[FSR0]");
 	asm("movf      FSR1L, W");
 	asm("movwi     5[FSR0]");
-	// Сохраняем флаг и запрещаем прерывания
+	// Save and disable interrupts
 	asm("movf      INTCON, W");
 	asm("bcf       INTCON, 7");
 	asm("andlw     0x80");
 	asm("movwf     ___loop_int_mask");
-	// Сохраняем пред. точку возврата
+	// Save stack
 	asm("banksel   TOSL");
 	asm("decf      STKPTR & 0x7F");
 	asm("movf      TOSL & 0x7F, W");
 	asm("movwi     6[FSR0]");
 	asm("movf      TOSH & 0x7F, W");
 	asm("movwi     7[FSR0]");
-	// Перенацеливаем пред. точку возврата на управление очередью
+	// Change stack to loop
 	asm("movlw     low(LOOP_RESUME)");
 	asm("movwf     TOSL & 0x7F");
 	asm("movlw     high(LOOP_RESUME)");
 	asm("movwf     TOSH & 0x7F");
 	asm("incf      STKPTR & 0x7F");
-	// Восстанавливаем прерывания
+	// Restore interrupts
 	asm("movf      ___loop_int_mask, W");
 	asm("iorwf     INTCON");
 }
@@ -149,7 +148,7 @@ void __loop_save_context()
 
 void __loop_restore_context()
 {
-	/* !!! FSR0 должен указывать на на контекст !!! */
+	/* !!! FSR0 must be point to task context !!! */
 	asm("moviw     1[FSR0]");
 	asm("movwf     BSR");
 	asm("moviw     2[FSR0]");
@@ -166,19 +165,19 @@ void __loop_restore_context()
 
 void __loop_restore_sp()
 {
-	/* !!! FSR0 должен указывать на на контекст !!! */
-	// Сохраняем флаг и запрещаем прерывания
+	/* !!! FSR0 must be point to task context !!! */
+	// Save and disable interrupts
 	asm("movf      INTCON, W");
 	asm("bcf       INTCON, 7");
 	asm("andlw     0x80");
 	asm("movwf     ___loop_int_mask");
-	// Восстанавливаем SP
+	// Restore stack
 	asm("banksel   STKPTR");
 	asm("moviw     6[FSR0]");
 	asm("movwf     TOSL & 0x7F");
 	asm("moviw     7[FSR0]");
 	asm("movwf     TOSH & 0x7F");
-	// Восстанавливаем прерывания
+	// Restore interrupts
 	asm("movf      ___loop_int_mask, W");
 	asm("iorwf     INTCON");
 }
@@ -187,29 +186,29 @@ void __loop_restore_sp()
 LOOP_TASK_STATUS loop_task_status(const LOOP_TASK pc)
 {
 	TASK  *task = loop.tasks;
-	// Ищем задачу
+	// Find task by entry point
 	for(uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		if (task->entry==pc) return task->status;
 	}
-	// Задача не найдена
+	// Task not found, return as finished
 	return LOOP_TASK_STATUS_FINISHED;
 }
 
 
 void loop_return()
 {
-	// Сохраняем контекст
+	// Save context
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_save_context();
-	// Изменяем точку возврата и возвращаем управление очереде
+	// Patch stack
 	FSR0 = (uint16_t) &loop.task->pc;
 	asm("movlw     low(CONTINUE_RESUME)");
 	asm("movwi     0[FSR0]");
 	asm("movlw     high(CONTINUE_RESUME)");
 	asm("movwi     1[FSR0]");
-	// Возвращаем управление очереди
+	// Return to loop
 	asm("return");
-	// Востанавливаем контекст и передаем управление задаче
+	// Restore stack and resume task
 	asm("CONTINUE_RESUME:");
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_restore_context();
@@ -219,23 +218,23 @@ void loop_return()
 
 void loop_sleep(uint16_t msec)
 {
-	// Расчитыем время завершения
+	// Calculate expire time
 	((SLEEP*)&loop.task->data)->until = loop.msec+msec;
-	// Сохраняем контекст
+	// Save context
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_save_context();
-	// Изменяем точку возврата и возвращаем управление очереде
+	// Patch stack
 	FSR0 = (uint16_t) &loop.task->pc;
 	asm("movlw     low(SLEEP_RESUME)");
 	asm("movwi     0[FSR0]");
 	asm("movlw     high(SLEEP_RESUME)");
 	asm("movwi     1[FSR0]");
 	asm("return");
-	// Восстанавливаем контекст
+	// Restore context
 	asm("SLEEP_RESUME:");
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_restore_context();
-	// Если время ожидания истекло возвращаем управление задаче
+	// If timeout expired resume task
 	if (loop.msec>=((SLEEP*)&loop.task->data)->until){
 		__loop_restore_sp();
 	}
@@ -244,23 +243,23 @@ void loop_sleep(uint16_t msec)
 
 void loop_await(const LOOP_TASK pc)
 {
-	// Запоминаем задачу
+	// Save awaiting task entry point
 	((AWAIT*)&loop.task->data)->entry = pc;
-	// Сохраняем контекст
+	// Save context
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_save_context();
-	// Изменяем точку возврата
+	// Patch stack
 	FSR0 = (uint16_t) &loop.task->pc;
 	asm("movlw     low(AWAIT_RESUME)");
 	asm("movwi     0[FSR0]");
 	asm("movlw     high(AWAIT_RESUME)");
 	asm("movwi     1[FSR0]");
 	asm("return");
-	// Восстанавливаем контекст
+	// Restore context
 	asm("AWAIT_RESUME:");
 	FSR0 = (uint16_t) &loop.task->context;
 	__loop_restore_context();
-	// Если задача завершена возвращаем управление
+	// If awaiting task finished, resume task
 	if (loop_task_status(((AWAIT*)&loop.task->data)->entry)==LOOP_TASK_STATUS_FINISHED){
 		__loop_restore_sp();
 	}
