@@ -1,4 +1,4 @@
-Asynchronous event loop for **PIC mid-range MCU** (8-bit)
+Asynchronous event loop for **PIC enhanced mid-range MCU** (8-bit)
 
 
 ============

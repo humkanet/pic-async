@@ -7,6 +7,11 @@
 #define LOOP_MAX_TASKS  5
 
 
+#if !defined(_PIC14EX) && !defined(_PIC14E)
+	#error Not an Enhanced Midrange PIC!
+#endif
+
+
 typedef void (*LOOP_TASK)(void);
 
 
