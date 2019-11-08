@@ -26,6 +26,11 @@ typedef struct {
 } LOOP_EVENT;
 
 
+typedef struct {
+	uint8_t  lock;
+} LOOP_MUTEX;
+
+
 void  loop_init(void);
 void  loop_tick(uint16_t msec);
 void  loop_task_start(const LOOP_TASK entry);
@@ -38,6 +43,10 @@ void  loop_sleep(uint16_t msec);
 
 /* Wait event */
 void  loop_wait(LOOP_EVENT *event);
+
+/* Acquire exclusive access */
+void  loop_acquire(LOOP_MUTEX *mutex);
+
 
 /* Await task with entry point *pc* finished */
 void  loop_await(const LOOP_TASK pc);

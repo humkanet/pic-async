@@ -30,7 +30,7 @@ typedef struct {
 
 
 typedef struct {
-	uint8_t  lock;
+	LOOP_MUTEX  *mutex;
 } MUTEX;
 
 
@@ -281,6 +281,33 @@ void loop_wait(LOOP_EVENT *event)
 	__loop_restore_context();
 	// If awaiting task finished, resume task
 	if (((EVENT*)&loop.task->data)->event->flag){
+		__loop_restore_sp();
+	}
+}
+
+
+void loop_acquire(LOOP_MUTEX *mutex)
+{
+	// Save event address
+	((MUTEX*)&loop.task->data)->mutex = mutex;
+	// Save context
+	FSR0 = (uint16_t) &loop.task->context;
+	__loop_save_context();
+	// Patch stack
+	FSR0 = (uint16_t) &loop.task->pc;
+	asm("movlw     low(MUTEX_RESUME)");
+	asm("movwi     0[FSR0]");
+	asm("movlw     high(MUTEX_RESUME)");
+	asm("movwi     1[FSR0]");
+	asm("return");
+	// Restore context
+	asm("MUTEX_RESUME:");
+	FSR0 = (uint16_t) &loop.task->context;
+	__loop_restore_context();
+	// If awaiting task finished, resume task
+	mutex = ((MUTEX*)&loop.task->data)->mutex;
+	if (!mutex->lock){
+		mutex->lock = 1;
 		__loop_restore_sp();
 	}
 }

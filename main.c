@@ -4,113 +4,192 @@
 #include "loop.h"
 
 
-static LOOP_EVENT  evt;
+static LOOP_EVENT  event;
+static LOOP_MUTEX  mutex;
 
 
 inline void setup()
 {
-	// Отключаем питание со всех модулей (кроме SYSCLK)
+	// Power off all modules except, SYSCLK
 	PMD0 = 0x7F;
 	PMD1 = 0xFF;
 	PMD2 = 0xFF;
 	PMD3 = 0xFF;
 	PMD4 = 0xFF;
 	PMD5 = 0xFF;
-	// Если не удалость запуститься с внешнего кварца, то переходим на внутренний 8МГц
+	// Cant start with external XTAL, fallback to internak 8MHz
 	if ((OSCCON2&0x70)!=0x70){
 		OSCCON1 = 0x60;
 		OSCFRQ  = 0x04;
 	}
-	// Режим сна - IDLE
-	IDLEN  = 1;
-	// Разрешаем прерывания от периферии
-	PEIE   = 1;
+	// Sleep mode - IDLE
+	IDLEN = 1;
 }
 
 
-void task1()
+/* --- Await example --- */
+void task_await1()
 {
+	// ... code ...
+	loop_sleep(100);
+	// mark task as finished
+	loop_task_finish();
+}
+void task_await2()
+{
+	// ... code ...
+	loop_sleep(200);
+	// mark task as finished
+	loop_task_finish();
+}
+void task_await()
+{
+	// start tasks
+	loop_task_start(task_await1);
+	loop_task_start(task_await2);
+	// wait tasks finished
+	loop_await(task_await1);
+	loop_await(task_await2);
+	// mark task as finished
+	loop_task_finish();
+}
+/* -- End await example --- */
+
+/* --- Event example ---*/
+void task_event1()
+{
+	// wait event
+	loop_wait(&event);
+	// mark task as finished
+	loop_task_finish();
+}
+void task_event2()
+{
+	// wait event
+	loop_wait(&event);
+	// mark task as finished
+	loop_task_finish();
+}
+void task_event()
+{
+	// clear event
+	event.flag = 0;
+	// start tasks
+	loop_task_start(task_event1);
+	loop_task_start(task_event2);
+	// ... code ...
+	loop_sleep(100);
+	// raise event
+	event.flag = 1;
+	// wait task finished
+	loop_await(task_event1);
+	loop_await(task_event2);
+	// mark task as finished
+	loop_task_finish();
+}
+/* --- Event example ---*/
+
+/* --- Mutex example --- */
+void task_mutex1()
+{
+	static uint8_t n;
+	for(n=0; n<3; n++){
+		// acquire exclusive access
+		loop_acquire(&mutex);
+		// ... code ...
+		loop_sleep(100);
+		// release mutex
+		mutex.lock = 0;
+	}
+	// mark task as finished
+	loop_task_finish();
+}
+void task_mutex2()
+{
+	static uint8_t n;
+	for(n=0; n<3; n++){
+		// acquire exclusive access
+		loop_acquire(&mutex);
+		// ... code ...
+		loop_sleep(100);
+		// release mutex
+		mutex.lock = 0;
+	}
+	// mark task as finished
+	loop_task_finish();
+}
+void task_mutex()
+{
+	// clear mutex
+	mutex.lock = 0;
+	// start tasks
+	loop_task_start(task_mutex1);
+	loop_task_start(task_mutex2);
+	// wait task finished
+	loop_await(task_mutex1);
+	loop_await(task_mutex2);
+	// mark task as finished
+	loop_task_finish();
+}
+/* --- End mutex example --- */
+
+/*--- Forever loop example --- */
+void task_loop_forever()
+{
+	// loop forewer
 	for(;;){
-		// ... my cool code ...
+		// ... code ...
 		asm("nop");
-		// Async sleep 1000 msec
-		loop_sleep(1000);
-		// ... my cool code ...
+		// Async sleep 100 msec
+		loop_sleep(100);
+		// ... code ...
 		asm("nop");
-		// Async sleep 2000 msec
-		loop_sleep(2000);
-		// ... my cool code ...
+		// Async sleep 200 msec
+		loop_sleep(200);
+		// ... code ...
 		asm("nop");
-		// Async sleep 500 msec
-		loop_sleep(500);
+		// Async sleep 50 msec
+		loop_sleep(50);
 	}
 }
+/* --- End forewer loop example --- */
 
-
-void task3()
+/* --- Loopt N-times example --- */
+void task_loop()
 {
 	// !!! All variables must be static !!!
 	static uint8_t n;
-	// Iterate 3 times
+	// Loop 3 times
 	for(n=0; n<3; n++){
 		loop_sleep(250);
 	}
 	// Mark task as finished
 	loop_task_finish();
 }
+/* --- ELoopt N-times example --- */
 
-
-void task4()
+/* --- Run examples task --- */
+void task_examples()
 {
-	static uint8_t n;
-	for(n=0; n<5; n++){
-		loop_sleep(250);
-	}
-	loop_task_finish();
-}
-
-
-void task5()
-{
-	loop_sleep(500);
-	evt.flag = 1;
-	loop_sleep(500);
-	loop_task_finish();
-}
-
-void task6()
-{
-	loop_wait(&evt);
-	loop_task_finish();
-}
-
-
-void task2()
-{
+	/* 1. Run forever loop task */
+	loop_task_start(task_loop_forever);
+	/* Loop current task forever */
 	for(;;){
-		loop_sleep(100);
-		loop_sleep(200);
-		loop_sleep(300);
-		// Start task3
-		loop_task_start(task3);
-		// Wait task finished
-		loop_await(task3);
-		// Start two tasks: task3 and task4
-		loop_task_start(task3);
-		loop_task_start(task4);
-		// Wait both tasks finished
-		loop_await(task3);
-		loop_await(task4);
-		// Clear event and start task5 that raise event, task6 wait event
-		evt.flag = 0;
-		loop_task_start(task5);
-		loop_task_start(task6);
-		// Wait event raised and task5 finished
-		loop_wait(&evt);
-		loop_await(task5);
-		loop_await(task6);
+		/* 2. Run loop N-times task and wait finished */
+		loop_task_start(task_loop);
+		loop_await(task_loop);
+		/* 3. Run await multiple tasks example */
+		loop_task_start(task_await);
+		loop_await(task_await);
+		/* 4. Run event example */
+		loop_task_start(task_event);
+		loop_await(task_event);
+		/* 5. Run mutex example */
+		loop_task_start(task_mutex);
+		loop_await(task_mutex);
 	}
 }
+/* --- End run examples task --- */
 
 
 void main()
@@ -119,10 +198,9 @@ void main()
 	setup();
 	ei();
 
-	// Initialize and add tasks to event loop
+	// Initialize and start examples task
 	loop_init();
-	loop_task_start(task1);
-	loop_task_start(task2);
+	loop_task_start(task_examples);
 
 	// Main loop
 	uint16_t  msec;
