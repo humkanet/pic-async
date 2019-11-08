@@ -10,7 +10,7 @@ typedef struct {
 		const uint8_t *ptr;        // Task local data
 		uint8_t       data[2];
 	};
-	uint8_t           context[8];  // MCU context (registers)
+	uint8_t           context[6];  // MCU context (registers)
 } TASK;
 
 
@@ -117,14 +117,10 @@ void __loop_save_context()
 	asm("movwi     0[FSR0]");
 	asm("movf      BSR, W");
 	asm("movwi     1[FSR0]");
-	asm("movf      FSR0H, W");
-	asm("movwi     2[FSR0]");
-	asm("movf      FSR0L, W");
-	asm("movwi     3[FSR0]");
 	asm("movf      FSR1H, W");
-	asm("movwi     4[FSR0]");
+	asm("movwi     2[FSR0]");
 	asm("movf      FSR1L, W");
-	asm("movwi     5[FSR0]");
+	asm("movwi     3[FSR0]");
 	// Save and disable interrupts
 	asm("movf      INTCON, W");
 	asm("bcf       INTCON, 7");
@@ -134,9 +130,9 @@ void __loop_save_context()
 	asm("banksel   TOSL");
 	asm("decf      STKPTR & 0x7F");
 	asm("movf      TOSL & 0x7F, W");
-	asm("movwi     6[FSR0]");
+	asm("movwi     4[FSR0]");
 	asm("movf      TOSH & 0x7F, W");
-	asm("movwi     7[FSR0]");
+	asm("movwi     5[FSR0]");
 	// Change stack to loop
 	asm("movlw     low(LOOP_RESUME)");
 	asm("movwf     TOSL & 0x7F");
@@ -155,12 +151,8 @@ void __loop_restore_context()
 	asm("moviw     1[FSR0]");
 	asm("movwf     BSR");
 	asm("moviw     2[FSR0]");
-	asm("movwf     FSR0H");
-	asm("moviw     3[FSR0]");
-	asm("movwf     FSR0L");
-	asm("moviw     4[FSR0]");
 	asm("movwf     FSR1H");
-	asm("moviw     5[FSR0]");
+	asm("moviw     3[FSR0]");
 	asm("movwf     FSR1L");
 	asm("moviw     0[FSR0]");
 }
@@ -176,9 +168,9 @@ void __loop_restore_sp()
 	asm("movwf     ___loop_int_mask");
 	// Restore stack
 	asm("banksel   STKPTR");
-	asm("moviw     6[FSR0]");
+	asm("moviw     4[FSR0]");
 	asm("movwf     TOSL & 0x7F");
-	asm("moviw     7[FSR0]");
+	asm("moviw     5[FSR0]");
 	asm("movwf     TOSH & 0x7F");
 	// Restore interrupts
 	asm("movf      ___loop_int_mask, W");
