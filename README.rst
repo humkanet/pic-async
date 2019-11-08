@@ -7,7 +7,7 @@ Features
 - Running multiple tasks
 - Asynchronous sleep
 - Await task (or tasks) finnished
-- EVENT and MUTEX xynchronization primitives
+- EVENT and MUTEX synchronization primitives
 
 ============
 Usage
