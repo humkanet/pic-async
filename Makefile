@@ -1,7 +1,7 @@
 XC="C:/Program Files (x86)/Microchip/xc8/v2.10"
 CC=$(XC)/bin/xc8.exe
 
-NAME     = pic-async
+NAME     = pic-loop
 MCU      = 16f18326
 FOSC     = 8000000UL
 OBJ_DIR  = ./obj
