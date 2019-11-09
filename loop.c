@@ -88,9 +88,6 @@ void loop_tick(uint16_t msec)
 void __loop_patch_context()
 {
 	/*
-		!!! NB !!!
-			FSR0 must be point to task context
-		!!! NB !!!
 		Stack before:
 			[STKPTR]   = loop_<wait function> resume PC
 			[STKPTR-1] = task resume address
@@ -107,6 +104,7 @@ void __loop_patch_context()
 			7. Patch stack to event loop (LOOP_RESUME)
 	*/
 	uint8_t  intcon;
+	FSR0 = (uint16_t) &loop.task->context;
 	// Save registers
 	asm("movwi     0[FSR0]");
 	asm("movf      BSR, W");
@@ -141,13 +139,18 @@ void __loop_patch_context()
 
 void __loop_restore_context()
 {
+	uint8_t  intcon;
 	/*
-		!!! NB !!!
-			FSR0 must be point to task context
-		!!! NB !!!
-		Restore task context:
-			1. Restore registers: BSR, FSR1, WREG
+		Restore task:
+			1. Restore registers: BSR, FSR1
+			2. Save INTCON and disable interrupts
+			3. Restore task resume address
+			4. Restore interrupts
+			5. Mark task to finish after returning to event loop
+			6. Restore WREG
+
 	*/
+	FSR0 = (uint16_t) &loop.task->context;
 	// Restore context
 	asm("moviw     1[FSR0]");
 	asm("movwf     BSR");
@@ -155,23 +158,6 @@ void __loop_restore_context()
 	asm("movwf     FSR1H");
 	asm("moviw     3[FSR0]");
 	asm("movwf     FSR1L");
-	asm("moviw     0[FSR0]");
-}
-
-
-void __loop_restore_sp()
-{
-	/*
-		!!! NB !!!
-			FSR0 must be point to task context
-		!!! NB !!!
-		Restore task:
-			1. Save INTCON and disable interrupts
-			2. Restore task resume address
-			3. Restore interrupts
-			4. Mark task to finish after returning to event loop
-	*/
-	uint8_t  intcon;
 	// Save and disable interrupts
 	intcon = INTCON;
 	GIE    = 0;
@@ -185,6 +171,8 @@ void __loop_restore_sp()
 	INTCON |= intcon & _INTCON_GIE_MASK;
 	// Mark task as finished
 	loop.finish = 1;
+	// Restore WREG
+	asm("moviw     0[FSR0]");
 }
 
 
@@ -203,12 +191,9 @@ LOOP_TASK_STATUS loop_task_status(const LOOP_TASK entry)
 void loop_return()
 {
 	// Patch context
-	FSR0 = (uint16_t) &loop.task->context;
 	__loop_patch_context();
 	// Continue
-	FSR0 = (uint16_t) &loop.task->context;
 	__loop_restore_context();
-	__loop_restore_sp();
 }
 
 
@@ -217,14 +202,10 @@ void loop_sleep(uint16_t msec)
 	// Calculate expire time
 	loop.task->data.u16 = loop.msec+msec;
 	// Patch context
-	FSR0 = (uint16_t) &loop.task->context;
 	__loop_patch_context();
-	// Continue
-	FSR0 = (uint16_t) &loop.task->context;
-	__loop_restore_context();
 	// If timeout expired resume task
 	if (loop.msec>=loop.task->data.u16){
-		__loop_restore_sp();
+		__loop_restore_context();
 	}
 }
 
@@ -234,14 +215,10 @@ void loop_await(const LOOP_TASK entry)
 	// Save awaiting task entry point
 	loop.task->data.pc = entry;
 	// Patch context
-	FSR0 = (uint16_t) &loop.task->context;
 	__loop_patch_context();
-	// Continue
-	FSR0 = (uint16_t) &loop.task->context;
-	__loop_restore_context();
 	// If awaiting task finished, resume task
 	if (loop_task_status(loop.task->data.pc)==LOOP_TASK_STATUS_FINISHED){
-		__loop_restore_sp();
+		__loop_restore_context();
 	}
 }
 
@@ -251,14 +228,10 @@ void loop_wait(LOOP_EVENT *event)
 	// Save event address
 	loop.task->data.ptr = event;
 	// Patch context
-	FSR0 = (uint16_t) &loop.task->context;
 	__loop_patch_context();
-	// Continue
-	FSR0 = (uint16_t) &loop.task->context;
-	__loop_restore_context();
 	// If awaiting task finished, resume task
 	if (((LOOP_EVENT*)loop.task->data.ptr)->flag){
-		__loop_restore_sp();
+		__loop_restore_context();
 	}
 }
 
@@ -267,17 +240,11 @@ void loop_acquire(LOOP_MUTEX *mutex)
 {
 	// Save event address
 	loop.task->data.ptr = mutex;
-	// Patch context
-	FSR0 = (uint16_t) &loop.task->context;
-	__loop_patch_context();
-	// Continue
-	FSR0 = (uint16_t) &loop.task->context;
-	__loop_restore_context();
 	// If awaiting task finished, resume task
 	mutex = loop.task->data.ptr;
 	if (!mutex->lock){
 		// Release mutex
 		mutex->lock = 1;
-		__loop_restore_sp();
+		__loop_restore_context();
 	}
 }
