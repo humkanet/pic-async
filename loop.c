@@ -18,7 +18,7 @@ typedef struct {
 } TASK;
 
 
-__persistent struct {
+struct {
 	uint8_t   finish : 1;
 	uint16_t  msec;
 	TASK      *task;
@@ -95,7 +95,8 @@ void __loop_patch_context()
 			[STKPTR]   = loop_<wait function> resume PC
 			[STKPTR-1] = task resume address
 		Stack after:
-			STKPTR     = STKPTR - 2
+			STKPTR     = STKPTR - 1
+			[STKPTR]   = loop resume address (LOOP_RESUME)
 		Save task context:
 			1. Save registers: WREG, BSR, FSR1
 			2. Save INTCON
@@ -103,7 +104,7 @@ void __loop_patch_context()
 			4. Move current resume address to task->pc
 			5. Save task resume address to task->context
 			6. Enable interrupts and mark task as running
-			7. Return control to event loop (goto LOOP_RESUME)
+			7. Patch stack to event loop (LOOP_RESUME)
 	*/
 	uint8_t  intcon;
 	// Save registers
@@ -129,13 +130,15 @@ void __loop_patch_context()
 	asm("movwi     4[FSR0]");
 	asm("movf      TOSH & 0x7F, W");
 	asm("movwi     5[FSR0]");
-	asm("decf      STKPTR & 0x7F");
+	// Return to event loop
+	asm("movlw     low(LOOP_RESUME)");
+	asm("movf      TOSL & 0x7F");
+	asm("movlw     high(LOOP_RESUME)");
+	asm("movf      TOSH & 0x7F");
 	// Restore interrupts
 	INTCON |= intcon & _INTCON_GIE_MASK;
 	// Mark task as runned
 	loop.finish = 0;
-	// Return to event loop
-	asm("goto      LOOP_RESUME");
 }
 
 
