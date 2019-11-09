@@ -13,6 +13,7 @@
 
 
 typedef void (*LOOP_TASK)(void);
+typedef void (*LOOP_WAITER)(void);
 
 
 typedef enum {
@@ -22,12 +23,12 @@ typedef enum {
 
 
 typedef struct {
-	uint8_t  flag;
+	uint8_t  flag : 1;
 } LOOP_EVENT;
 
 
 typedef struct {
-	uint8_t  lock;
+	uint8_t  lock : 1;
 } LOOP_MUTEX;
 
 
@@ -35,20 +36,19 @@ void  loop_init(void);
 void  loop_tick(uint16_t msec);
 void  loop_task_start(const LOOP_TASK entry);
 void  loop_task_cancel(const LOOP_TASK entry);
-void  loop_task_finish(void);
 LOOP_TASK_STATUS  loop_task_status(const LOOP_TASK entry);
+
 
 /* Sleep *msec* interval */
 void  loop_sleep(uint16_t msec);
 
-/* Wait event */
+/* Wait *event* raised */
 void  loop_wait(LOOP_EVENT *event);
 
 /* Acquire exclusive access */
 void  loop_acquire(LOOP_MUTEX *mutex);
 
-
-/* Await task with entry point *pc* finished */
+/* Wait task with entry point *pc* finished */
 void  loop_await(const LOOP_TASK pc);
 
 /* Return contorl to event loop */

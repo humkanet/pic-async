@@ -1,12 +1,12 @@
-Asynchronous event loop for **PIC enhanced mid-range MCU** (8-bit)
+Lightweight asynchronous event loop for **PIC enhanced mid-range 8-bit MCU**
 
 
 ============
 Features
 ============
-- Running multiple tasks
+- Running multiple tasks simultaneously
 - Asynchronous sleep
-- Await task (or tasks) finnished
+- Asynchronous awaiting task (or tasks) finishing
 - EVENT and MUTEX synchronization primitives
 
 ============
@@ -38,8 +38,6 @@ Quick start:
 		for(n=0; n<3; n++){
 			loop_sleep(123);
 		}
-		// Use loop_task_finish() to mark task as finished
-		loop_task_finish();
 	}
 
 	...
@@ -66,13 +64,11 @@ Awaiting tasks:
 	void task1()
 	{
 		loop_sleep(100);
-		loop_task_finish();
 	}
 
 	void task2()
 	{
 		loop_sleep(500);
-		loop_task_finish();
 	}
 
 	void task3()
@@ -87,8 +83,6 @@ Awaiting tasks:
 		// Wait both tasks finished
 		loop_await(task1);
 		loop_await(task2);
-		// Mark current task as finished
-		loop_task_finish();
 	}
 
 Wait pin changed
@@ -112,13 +106,11 @@ Synchronization by Event
 	voit task1()
 	{
 		loop_wait(&event);
-		loop_task_finish();
 	}
 
 	void task2()
 	{
 		loop_wait(&event);
-		loop_task_finish();
 	}
 
 	void task3()
@@ -135,5 +127,4 @@ Synchronization by Event
 		// Wait task finished
 		loop_await(task1);
 		loop_await(task2);
-		loop_task_finish();
 	}

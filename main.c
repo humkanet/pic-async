@@ -32,15 +32,11 @@ void task_await1()
 {
 	// ... code ...
 	loop_sleep(100);
-	// mark task as finished
-	loop_task_finish();
 }
 void task_await2()
 {
 	// ... code ...
 	loop_sleep(200);
-	// mark task as finished
-	loop_task_finish();
 }
 void task_await()
 {
@@ -50,8 +46,6 @@ void task_await()
 	// wait tasks finished
 	loop_await(task_await1);
 	loop_await(task_await2);
-	// mark task as finished
-	loop_task_finish();
 }
 /* -- End await example --- */
 
@@ -60,15 +54,11 @@ void task_event1()
 {
 	// wait event
 	loop_wait(&event);
-	// mark task as finished
-	loop_task_finish();
 }
 void task_event2()
 {
 	// wait event
 	loop_wait(&event);
-	// mark task as finished
-	loop_task_finish();
 }
 void task_event()
 {
@@ -84,8 +74,6 @@ void task_event()
 	// wait task finished
 	loop_await(task_event1);
 	loop_await(task_event2);
-	// mark task as finished
-	loop_task_finish();
 }
 /* --- Event example ---*/
 
@@ -101,8 +89,6 @@ void task_mutex1()
 		// release mutex
 		mutex.lock = 0;
 	}
-	// mark task as finished
-	loop_task_finish();
 }
 void task_mutex2()
 {
@@ -115,8 +101,6 @@ void task_mutex2()
 		// release mutex
 		mutex.lock = 0;
 	}
-	// mark task as finished
-	loop_task_finish();
 }
 void task_mutex()
 {
@@ -128,8 +112,6 @@ void task_mutex()
 	// wait task finished
 	loop_await(task_mutex1);
 	loop_await(task_mutex2);
-	// mark task as finished
-	loop_task_finish();
 }
 /* --- End mutex example --- */
 
@@ -163,8 +145,6 @@ void task_loop()
 	for(n=0; n<3; n++){
 		loop_sleep(250);
 	}
-	// Mark task as finished
-	loop_task_finish();
 }
 /* --- ELoopt N-times example --- */
 
@@ -203,7 +183,7 @@ void main()
 	loop_task_start(task_examples);
 
 	// Main loop
-	uint16_t  msec;
+	uint16_t  msec = 0;
 	for(;;){
 		loop_tick(msec++);
 	}
