@@ -132,9 +132,9 @@ void __loop_patch_context()
 	asm("movwi     5[FSR0]");
 	// Return to event loop
 	asm("movlw     low(LOOP_RESUME)");
-	asm("movf      TOSL & 0x7F");
+	asm("movf      TOSL & 0x7F, W");
 	asm("movlw     high(LOOP_RESUME)");
-	asm("movf      TOSH & 0x7F");
+	asm("movf      TOSH & 0x7F, W");
 	// Restore interrupts
 	INTCON |= intcon & _INTCON_GIE_MASK;
 	// Mark task as runned
