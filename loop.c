@@ -94,9 +94,9 @@ void __loop_patch_context()
 		Stack before:
 			[STKPTR]   = loop_<wait function> resume PC
 			[STKPTR-1] = task resume address
+			[STKPTR-2] = loop_tick resume address
 		Stack after:
-			STKPTR     = STKPTR - 1
-			[STKPTR]   = loop resume address (LOOP_RESUME)
+			STKPTR     = STKPTR - 2
 		Save task context:
 			1. Save registers: WREG, BSR, FSR1
 			2. Save INTCON
@@ -131,10 +131,7 @@ void __loop_patch_context()
 	asm("movf      TOSH & 0x7F, W");
 	asm("movwi     5[FSR0]");
 	// Return to event loop
-	asm("movlw     low(LOOP_RESUME)");
-	asm("movf      TOSL & 0x7F, W");
-	asm("movlw     high(LOOP_RESUME)");
-	asm("movf      TOSH & 0x7F, W");
+	asm("decf      STKPTR & 0x7F");
 	// Restore interrupts
 	INTCON |= intcon & _INTCON_GIE_MASK;
 	// Mark task as runned
