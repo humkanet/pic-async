@@ -2,8 +2,12 @@
 #include "loop.h"
 
 
+#define U16(x)  ((uint16_t) (x))
+
+
 typedef union {
 	void        *ptr;
+	uint16_t    u8;
 	uint16_t    u16;
 	LOOP_TASK   pc;
 } TASK_DATA;
@@ -12,6 +16,7 @@ typedef union {
 typedef struct {
 	LOOP_TASK         entry;       // Task entry point
 	TASK_DATA         data;        // Task data
+	TASK_DATA         data2;       // Task data
 	LOOP_TASK_STATUS  status;      // Task status (running, finished, ...)
 	LOOP_WAITER       pc;          // Task resume address
 	uint8_t           context[6];  // MCU context (registers)
@@ -178,8 +183,8 @@ void __loop_restore_context()
 
 LOOP_TASK_STATUS loop_task_status(const LOOP_TASK entry)
 {
-	TASK  *task = loop.tasks;
 	// Find task by entry point
+	TASK  *task = loop.tasks;
 	for(uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
 		if (task->entry==entry) return task->status;
 	}
@@ -200,11 +205,12 @@ void loop_return()
 void loop_sleep(uint16_t msec)
 {
 	// Calculate expire time
-	loop.task->data.u16 = loop.msec+msec;
+	loop.task->data.u16  = loop.msec;
+	loop.task->data2.u16 = msec;
 	// Patch context
 	__loop_patch_context();
 	// If timeout expired resume task
-	if (loop.msec>=loop.task->data.u16){
+	if (U16(loop.msec-loop.task->data.u16)>=loop.task->data2.u16){
 		__loop_restore_context();
 	}
 }
