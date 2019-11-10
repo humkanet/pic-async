@@ -16,7 +16,6 @@ typedef union {
 typedef struct {
 	LOOP_TASK         entry;       // Task entry point
 	TASK_DATA         data;        // Task data
-	TASK_DATA         data2;       // Task data
 	LOOP_TASK_STATUS  status;      // Task status (running, finished, ...)
 	LOOP_WAITER       pc;          // Task resume address
 	uint8_t           context[6];  // MCU context (registers)
@@ -24,8 +23,9 @@ typedef struct {
 
 
 struct {
-	uint8_t   finish : 1;
 	uint16_t  msec;
+	uint16_t  dmsec;
+	uint8_t   finish : 1;
 	TASK      *task;
 	TASK      tasks[LOOP_MAX_TASKS];
 } loop;
@@ -73,8 +73,8 @@ void loop_task_cancel(const LOOP_TASK entry)
 
 void loop_tick(uint16_t msec)
 {
-	// Save system clock
-	loop.msec = msec;
+	loop.dmsec = U16(msec-loop.msec);
+	loop.msec  = msec;
 	// Loop over all tasks
 	loop.task = loop.tasks;
 	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, loop.task++){
@@ -205,14 +205,20 @@ void loop_return()
 void loop_sleep(uint16_t msec)
 {
 	// Calculate expire time
-	loop.task->data.u16  = loop.msec;
-	loop.task->data2.u16 = msec;
+	loop.task->data.u16  = msec;
 	// Patch context
 	__loop_patch_context();
 	// If timeout expired resume task
-	if (U16(loop.msec-loop.task->data.u16)>=loop.task->data2.u16){
-		__loop_restore_context();
-	}
+	FSR0 = (uint16_t) &loop.task->data;
+	// Substract dmsec from sleep msec
+	asm("banksel   _loop");
+	asm("movf      (_loop+2), W");  // WREG = low(dmsec)
+	asm("subwf     INDF0, F");      // low(msec) = low(msec) - WREG
+	asm("moviw     FSR0++");        // FSR0 = FSR0 + 1
+	asm("movf      (_loop+3), W");  // WREG = high(dmsec)
+	asm("subwfb    INDF0, F");      // high(msec) = high(msec) - WREG - CARRY
+	asm("btfss     STATUS, 0");     // Skip if CARRY
+	asm("call     ___loop_restore_context");
 }
 
 
