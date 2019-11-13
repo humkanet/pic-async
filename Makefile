@@ -9,10 +9,9 @@ DIST_DIR = ./dist
 
 SRCS     = main.c loop.c
 
-
 OBJS     = $(SRCS:.c=.p1)
 DEPS     = $(SRCS:.c=.d)
-CFLAGS   = -Q --chip=$(MCU) -D_XTAL_FREQ=$(FOSC) -DFW_VERSION=$(VERSION) --std=c99 --objdir=$(OBJ_DIR) --dep=gcc $(FLAGS) -g
+CFLAGS   = -Q --chip=$(MCU) -D_XTAL_FREQ=$(FOSC) --std=c99 --objdir=$(OBJ_DIR) --dep=gcc $(FLAGS) -g
 LDFLAGS  = -Q --chip=$(MCU) --outdir=$(OBJ_DIR)
 
 
@@ -24,7 +23,6 @@ $(DIST_DIR)/$(NAME).hex $(DIST_DIR)/$(NAME).cof: $(OBJ_DIR) $(OBJS)
 	@mkdir -p $(DIST_DIR)
 	@$(CC) $(LDFLAGS) --output=inhx32,mcof --asmlist -O$(notdir $(NAME)) $(OBJS)
 	cp $(OBJ_DIR)/$(notdir $(NAME)).hex $(OBJ_DIR)/$(notdir $(NAME)).cof $(DIST_DIR)
-
 
 %.p1: %.c
 %.p1: %.c %.d
@@ -40,6 +38,6 @@ $(OBJ_DIR):
 	@mkdir -p $@
 
 clean:
-	rm -rf $(DEPS) $(OBJS) $(OPTS:.c=.p1) $(OPTS:.c=.d) $(OBJ_DIR) $(DIST_DIR)
+	rm -rf $(DEPS) $(OBJS) $(OBJ_DIR) $(DIST_DIR)
 
 include $(DEPS)

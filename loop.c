@@ -17,7 +17,7 @@ typedef struct {
 	TASK_DATA         data;        // Task data
 	LOOP_TASK_STATUS  status;      // Task status (running, finished, ...)
 	LOOP_WAITER       pc;          // Task resume address
-	uint8_t           context[6];  // MCU context (registers)
+	uint8_t           context[5];  // MCU context (registers)
 } TASK;
 
 
@@ -29,16 +29,25 @@ __persistent static struct {
 	TASK      tasks[LOOP_MAX_TASKS];
 } loop;
 
+
 __persistent static uint8_t  __loop_intcon;
 
 
 void loop_init()
 {
+	// Load loop.tasks to FSR0
+	FSR0 = (uint16_t) &loop.tasks[0].status;
 	// Mark all tasks as finished
-	TASK  *task = loop.tasks;
-	for (uint8_t n=0; n<LOOP_MAX_TASKS; n++, task++){
-		task->status = LOOP_TASK_STATUS_FINISHED;
-	}
+	asm("movlw     " ___mkstr(-LOOP_MAX_TASKS));
+	asm("LOOP_INIT_LOOP:");
+	asm("andlw     0xFF");
+	asm("btfsc     STATUS, 2"); // Skip if zero
+	asm("return");
+	asm("clrf      INDF0");
+	asm("incf      INDF0");
+	asm("addfsr    FSR0, 12"); // FSR0 += 12 (sizeof(TASK);
+	asm("addlw     1");
+	asm("goto      LOOP_INIT_LOOP");
 }
 
 
@@ -101,7 +110,7 @@ void __loop_patch_context()
 		Stack after:
 			STKPTR     = STKPTR - 2
 		Save task context:
-			1. Save registers: WREG, BSR, FSR1
+			1. Save registers: BSR, FSR1
 			2. Save INTCON
 			3. Disable interrupts (GIE=0)
 			4. Move current resume address to task->pc
@@ -111,13 +120,12 @@ void __loop_patch_context()
 	*/
 	FSR0 = (uint16_t) &loop.task->context;
 	// Save registers
-	asm("movwi     0[FSR0]");
 	asm("movf      BSR, W");
-	asm("movwi     1[FSR0]");
+	asm("movwi     0[FSR0]");
 	asm("movf      FSR1H, W");
-	asm("movwi     2[FSR0]");
+	asm("movwi     1[FSR0]");
 	asm("movf      FSR1L, W");
-	asm("movwi     3[FSR0]");
+	asm("movwi     2[FSR0]");
 	// Save INTCON and disable interrupts
 	asm("banksel   ___loop_intcon");
 	asm("movf      INTCON, W");
@@ -132,9 +140,9 @@ void __loop_patch_context()
 	// Save task return PC and remove from stack
 	asm("decf      STKPTR & 0x7F");
 	asm("movf      TOSL & 0x7F, W");
-	asm("movwi     4[FSR0]");
+	asm("movwi     3[FSR0]");
 	asm("movf      TOSH & 0x7F, W");
-	asm("movwi     5[FSR0]");
+	asm("movwi     4[FSR0]");
 	// Return to event loop
 	asm("decf      STKPTR & 0x7F");
 	// Restore interrupts
@@ -162,22 +170,21 @@ void __loop_restore_context()
 	asm("bcf       INTCON, 7");
 	// Restore stack
 	asm("banksel   STKPTR");
-	asm("moviw     4[FSR0]");
+	asm("moviw     3[FSR0]");
 	asm("movwf     TOSL & 0x7F");
-	asm("moviw     5[FSR0]");
+	asm("moviw     4[FSR0]");
 	asm("movwf     TOSH & 0x7F");
 	// Restore interrupts
 	INTCON |= __loop_intcon & _INTCON_GIE_MASK;
 	// Mark task as finished
 	loop.finish = 1;
 	// Restore context
-	asm("moviw     1[FSR0]");
-	asm("movwf     BSR");
-	asm("moviw     2[FSR0]");
-	asm("movwf     FSR1H");
-	asm("moviw     3[FSR0]");
-	asm("movwf     FSR1L");
 	asm("moviw     0[FSR0]");
+	asm("movwf     BSR");
+	asm("moviw     1[FSR0]");
+	asm("movwf     FSR1H");
+	asm("moviw     2[FSR0]");
+	asm("movwf     FSR1L");
 }
 
 
@@ -209,7 +216,7 @@ void loop_sleep(uint16_t msec)
 	// Patch context
 	__loop_patch_context();
 	// If timeout expired resume task
-	 FSR0 = (uint16_t) &loop.task->data.u16;
+	FSR0 = (uint16_t) &loop.task->data.u16;
 	// loop.task->data.u16 -= loop.dmsec
 	asm("banksel   _loop");
 	asm("movf      (_loop+2)&0x7F, W");  // WREG = low(dmsec)
@@ -253,6 +260,8 @@ void loop_acquire(LOOP_MUTEX *mutex)
 {
 	// Save event address
 	loop.task->data.ptr = mutex;
+	// Patch context
+	__loop_patch_context();
 	// If mutex locked return control to event loop,
 	// else lock mutex and resume task
 	if (!((LOOP_MUTEX*)loop.task->data.ptr)->lock){
